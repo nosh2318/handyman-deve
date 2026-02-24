@@ -140,6 +140,14 @@ function InsuranceForm({carId,initAmount,initNote,onSave,onClose}){
   </div>;
 }
 
+/* ═══════════════════ STORE 識別 ═══════════════════ */
+const STORE_ID = (()=>{
+  const seg = window.location.pathname.split("/").filter(Boolean)[0] || "naha";
+  return ["naha","sapporo"].includes(seg) ? seg : "naha";
+})();
+const STORE_NAMES = { naha:"那覇空港店", sapporo:"札幌店" };
+const STORE_NAME  = STORE_NAMES[STORE_ID] || STORE_ID;
+
 /* ═══════════════════ MAIN APP ═══════════════════ */
 export default function App(){
   const [tab,setTab]=useState("dashboard");
@@ -188,10 +196,10 @@ export default function App(){
     try{
       // ── Supabase から全データを並列取得 ──
       const [r1,r2,r3,r4] = await Promise.all([
-        supabase.from("cars").select("*").order("created_at"),
-        supabase.from("car_data").select("*"),
-        supabase.from("logs").select("*").order("created_at",{ascending:false}),
-        supabase.from("classes").select("*").order("created_at"),
+        supabase.from("cars").select("*").eq("store_id",STORE_ID).order("created_at"),
+        supabase.from("car_data").select("*").eq("store_id",STORE_ID),
+        supabase.from("logs").select("*").eq("store_id",STORE_ID).order("created_at",{ascending:false}),
+        supabase.from("classes").select("*").eq("store_id",STORE_ID).order("created_at"),
       ]);
       if(r1.data) setCars(r1.data.map(row=>({
         id:row.id, name:row.name, plate:row.plate, type:row.type||"",
@@ -268,12 +276,12 @@ export default function App(){
     let nc;
     if(editClass){
       nc=classes.map(c=>c.id===editClass?{...c,...classForm}:c);
-      await supabase.from("classes").upsert({id:editClass,name:classForm.name,color:classForm.color});
+      await supabase.from("classes").upsert({id:editClass,name:classForm.name,color:classForm.color,store_id:STORE_ID});
       notify("クラスを更新しました ✓");
     } else {
       const newId=`cls${Date.now()}`;
       nc=[...classes,{id:newId,name:classForm.name,color:classForm.color}];
-      await supabase.from("classes").insert({id:newId,name:classForm.name,color:classForm.color});
+      await supabase.from("classes").insert({id:newId,name:classForm.name,color:classForm.color,store_id:STORE_ID});
       notify("クラスを追加しました ✓");
     }
     setClasses(nc);setShowClassForm(false);setEditClass(null);
@@ -296,14 +304,14 @@ export default function App(){
     let nc;
     if(editCar){
       nc=cars.map(c=>c.id===editCar?{...c,...carForm}:c);
-      const row={id:editCar,name:carForm.name,plate:carForm.plate,type:carForm.type||"",status:carForm.status||"active",class_id:carForm.classId||"",insurance_amount:carForm.insuranceAmount||"",insurance_note:carForm.insuranceNote||""};
+      const row={id:editCar,name:carForm.name,plate:carForm.plate,type:carForm.type||"",status:carForm.status||"active",class_id:carForm.classId||"",insurance_amount:carForm.insuranceAmount||"",insurance_note:carForm.insuranceNote||"",store_id:STORE_ID};
       const {error}=await supabase.from("cars").upsert(row);
       if(error){console.error("saveCar:",error);notify("保存エラー");return;}
       notify("更新しました ✓");
     } else {
       const newId=`c${Date.now()}`;
       nc=[...cars,{id:newId,...carForm}];
-      const row={id:newId,name:carForm.name,plate:carForm.plate,type:carForm.type||"",status:carForm.status||"active",class_id:carForm.classId||"",insurance_amount:carForm.insuranceAmount||"",insurance_note:carForm.insuranceNote||""};
+      const row={id:newId,name:carForm.name,plate:carForm.plate,type:carForm.type||"",status:carForm.status||"active",class_id:carForm.classId||"",insurance_amount:carForm.insuranceAmount||"",insurance_note:carForm.insuranceNote||"",store_id:STORE_ID};
       const {error}=await supabase.from("cars").insert(row);
       if(error){console.error("saveCar:",error);notify("保存エラー");return;}
       notify("追加しました ✓");
@@ -364,10 +372,10 @@ export default function App(){
     csvRows.forEach(row=>{
       const id=`c${Date.now()}_${Math.random().toString(36).slice(2,5)}`;
       nc.push({id,name:row.name,plate:row.plate,type:"",status:row.status||"active",classId:row.classId||""});
-      carRows.push({id,name:row.name,plate:row.plate,type:"",status:row.status||"active",class_id:row.classId||""});
+      carRows.push({id,name:row.name,plate:row.plate,type:"",status:row.status||"active",class_id:row.classId||"",store_id:STORE_ID});
       if(row.mileage){
         nd[id]={currentMileage:row.mileage,lastUpdated:now,mileageHistory:{[now.slice(0,7)]:row.mileage}};
-        dataRows.push({car_id:id,current_mileage:row.mileage,last_updated:now,mileage_history:{[now.slice(0,7)]:row.mileage}});
+        dataRows.push({car_id:id,current_mileage:row.mileage,last_updated:now,mileage_history:{[now.slice(0,7)]:row.mileage},store_id:STORE_ID});
       }
     });
     await supabase.from("cars").insert(carRows);
@@ -395,7 +403,8 @@ export default function App(){
       last_updated:new Date().toISOString(),
       mileage_history:newHist,
       prev_inspection_date:nd[carId].prevInspectionDate||"",
-      inspection_date:nd[carId].inspectionDate||""
+      inspection_date:nd[carId].inspectionDate||"",
+      store_id:STORE_ID
     });
     if(error) console.error("saveMil:",error);
     setMilCarId(null);setMilForm({mileage:"",month:new Date().toISOString().slice(0,7)});notify("走行距離を保存しました ✓");
@@ -412,7 +421,8 @@ export default function App(){
       last_updated:nd[carId].lastUpdated||null,
       prev_inspection_date:prev||"",
       inspection_date:next||"",
-      mileage_history:nd[carId].mileageHistory||{}
+      mileage_history:nd[carId].mileageHistory||{},
+      store_id:STORE_ID
     });
     if(error) console.error("saveInsp:",error);
     setInspCarId(null);notify("車検日を保存しました ✓");
@@ -426,7 +436,8 @@ export default function App(){
     setLogs(nl);
     const {error}=await supabase.from("logs").insert({
       id:newId, car_id:data.carId, type:data.type, date:data.date,
-      amount:data.amount?parseInt(data.amount):0, payee:data.payee||"", note:data.note||""
+      amount:data.amount?parseInt(data.amount):0, payee:data.payee||"", note:data.note||"",
+      store_id:STORE_ID
     });
     if(error) console.error("addLog:",error);
     setOpenLogCarId(null);notify("整備ログを追加しました ✓");
@@ -588,8 +599,16 @@ export default function App(){
         <div style={{display:"flex",alignItems:"center",gap:14}}>
           <div style={{background:C.yellow,color:"#000",padding:"5px 12px",fontWeight:"bold",fontSize:14,letterSpacing:2,borderRadius:2}}>HANDYMAN</div>
           <span style={{color:C.textMuted,fontSize:12,letterSpacing:2}}>FLEET MANAGER</span>
+          <span style={{color:C.yellow,fontSize:13,fontWeight:"bold",letterSpacing:1}}>｜ {STORE_NAME}</span>
         </div>
-        <div style={{display:"flex",alignItems:"center",gap:16}}>
+        <div style={{display:"flex",alignItems:"center",gap:12}}>
+          {/* 店舗切り替え */}
+          {Object.entries(STORE_NAMES).map(([sid,sname])=>(
+            <a key={sid} href={`/${sid}`}
+              style={{color:sid===STORE_ID?C.yellow:C.textMuted,fontSize:11,textDecoration:"none",border:`1px solid ${sid===STORE_ID?C.yellow:C.border}`,padding:"4px 10px",borderRadius:3,fontWeight:sid===STORE_ID?"bold":"normal",background:sid===STORE_ID?`${C.yellow}11`:"none"}}>
+              {sname}
+            </a>
+          ))}
           {alertCars.length>0&&<div style={{background:C.danger,color:"#fff",borderRadius:20,padding:"4px 12px",fontSize:12,fontWeight:"bold"}}>⚠️ {alertCars.length}件</div>}
           {notif&&<span style={{color:C.success,fontSize:12}}>{notif}</span>}
         </div>
