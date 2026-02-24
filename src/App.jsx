@@ -169,6 +169,8 @@ export default function App(){
   const [inspCarId,setInspCarId]=useState(null);
   const [insuranceCarId,setInsuranceCarId]=useState(null);
   const [logCarFilter,setLogCarFilter]=useState(null);
+  const [editLogId,setEditLogId]=useState(null);
+  const [editLogForm,setEditLogForm]=useState({type:"oil",date:"",amount:"",payee:"",note:""});
 
   // フォーム
   const [carForm,setCarForm]=useState({name:"",plate:"",type:"",status:"active",classId:"",insuranceAmount:"",insuranceNote:""});
@@ -438,6 +440,18 @@ export default function App(){
     await supabase.from("logs").delete().eq("id",id);
     notify("削除しました");
   }
+  function openEditLog(log){
+    setEditLogId(log.id);
+    setEditLogForm({type:log.type||"oil",date:log.date||"",amount:log.amount?String(log.amount):"",payee:log.payee||"",note:log.note||""});
+  }
+  async function updateLog(){
+    if(!editLogId)return;
+    const updated={type:editLogForm.type,date:editLogForm.date,amount:editLogForm.amount?parseInt(editLogForm.amount):0,payee:editLogForm.payee||"",note:editLogForm.note||""};
+    setLogs(logs.map(l=>l.id===editLogId?{...l,...updated}:l));
+    const {error}=await supabase.from("logs").update({type:updated.type,date:updated.date,amount:updated.amount,payee:updated.payee,note:updated.note}).eq("id",editLogId);
+    if(error)console.error("updateLog:",error);
+    setEditLogId(null);notify("整備ログを更新しました ✓");
+  }
 
   // アラート・集計
   function oilKm(id){const d=carData[id];if(!d?.currentMileage)return null;const last=[...logs].filter(l=>l.carId===id&&l.type==="oil").sort((a,b)=>new Date(b.date)-new Date(a.date))[0];const base=last?(carData[id]?.mileageHistory?.[last.date.slice(0,7)]||d.currentMileage-1000):d.currentMileage;return base+5000;}
@@ -563,15 +577,34 @@ export default function App(){
                   </div>
                   {carLogs.length===0?<div style={{color:C.textMuted,textAlign:"center",padding:24,background:C.bgForm,borderRadius:6}}>整備ログがありません</div>:(
                     <div style={{maxHeight:280,overflowY:"auto",display:"flex",flexDirection:"column",gap:8}}>
-                      {carLogs.map(log=>{const t=LOG_TYPES[log.type];return(
-                        <div key={log.id} style={{background:C.bgForm,border:`1px solid ${C.border}`,borderLeft:`3px solid ${t?.color}`,borderRadius:4,padding:"12px 16px",display:"flex",gap:12}}>
-                          <span style={{fontSize:18}}>{t?.icon}</span>
-                          <div style={{flex:1}}>
-                            <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}><span style={{color:t?.color,fontSize:13,fontWeight:"bold"}}>{t?.label}</span><span style={{color:C.textMuted,fontSize:11}}>{log.date}</span></div>
-                            {log.payee&&<div style={{color:C.textSec,fontSize:11}}>📍 {log.payee}</div>}
-                            {log.note&&<div style={{color:C.textSec,fontSize:11}}>{log.note}</div>}
-                            {log.amount>0&&<div style={{color:C.warn,fontSize:12,fontWeight:"bold",marginTop:4}}>{fmtYen(log.amount)}</div>}
-                          </div>
+                      {carLogs.map(log=>{const t=LOG_TYPES[log.type];const isEd=editLogId===log.id;return(
+                        <div key={log.id} style={{background:isEd?"#0f1f3a":C.bgForm,border:`1px solid ${isEd?C.yellow:C.border}`,borderLeft:`3px solid ${isEd?C.yellow:t?.color}`,borderRadius:4,overflow:"hidden"}}>
+                          {isEd?(
+                            <div style={{padding:"14px 16px"}}>
+                              <div style={{color:C.yellow,fontSize:11,letterSpacing:2,marginBottom:12}}>── ログを編集</div>
+                              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
+                                <FR label="種別"><select value={editLogForm.type} onChange={e=>setEditLogForm({...editLogForm,type:e.target.value})} style={inp}>{Object.entries(LOG_TYPES).map(([k,v])=><option key={k} value={k}>{v.icon} {v.label}</option>)}</select></FR>
+                                <FR label="実施日"><DateSelect value={editLogForm.date} onChange={v=>setEditLogForm({...editLogForm,date:v})}/></FR>
+                              </div>
+                              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
+                                <FR label="金額（円）"><input type="number" value={editLogForm.amount} onChange={e=>setEditLogForm({...editLogForm,amount:e.target.value})} style={inp} placeholder="例：15000"/></FR>
+                                <FR label="支払い先"><input type="text" value={editLogForm.payee} onChange={e=>setEditLogForm({...editLogForm,payee:e.target.value})} style={inp} placeholder="例：○○整備"/></FR>
+                              </div>
+                              <FR label="メモ"><input type="text" value={editLogForm.note} onChange={e=>setEditLogForm({...editLogForm,note:e.target.value})} style={inp} placeholder="メモ"/></FR>
+                              <div style={{display:"flex",gap:8,marginTop:4}}><button onClick={updateLog} style={btn}>保存</button><button onClick={()=>setEditLogId(null)} style={btn2}>キャンセル</button></div>
+                            </div>
+                          ):(
+                            <div style={{padding:"12px 16px",display:"flex",gap:12,alignItems:"flex-start"}}>
+                              <span style={{fontSize:18}}>{t?.icon}</span>
+                              <div style={{flex:1}}>
+                                <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}><span style={{color:t?.color,fontSize:13,fontWeight:"bold"}}>{t?.label}</span><span style={{color:C.textMuted,fontSize:11}}>{log.date}</span></div>
+                                {log.payee&&<div style={{color:C.textSec,fontSize:11}}>📍 {log.payee}</div>}
+                                {log.note&&<div style={{color:C.textSec,fontSize:11}}>{log.note}</div>}
+                                {log.amount>0&&<div style={{color:C.warn,fontSize:12,fontWeight:"bold",marginTop:4}}>{fmtYen(log.amount)}</div>}
+                              </div>
+                              <button onClick={()=>openEditLog(log)} style={{background:"none",border:"none",color:C.textMuted,cursor:"pointer",fontSize:13,padding:"2px 4px",flexShrink:0}}>✏️</button>
+                            </div>
+                          )}
                         </div>
                       );})}
                     </div>
@@ -983,16 +1016,37 @@ export default function App(){
                         <div style={{borderTop:`1px solid ${C.border}`,background:C.bgForm}}>
                           {carLogs.length===0?<div style={{color:C.textMuted,textAlign:"center",padding:24}}>整備ログがありません</div>:(
                             <div style={{maxHeight:400,overflowY:"auto"}}>
-                              {carLogs.map(log=>{const t=LOG_TYPES[log.type];return(
-                                <div key={log.id} style={{display:"flex",gap:12,padding:"14px 20px",borderBottom:`1px solid ${C.border}22`,borderLeft:`3px solid ${t?.color}`}}>
-                                  <span style={{fontSize:18}}>{t?.icon}</span>
-                                  <div style={{flex:1}}>
-                                    <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}><span style={{color:t?.color,fontSize:13,fontWeight:"bold"}}>{t?.label}</span><span style={{color:C.textMuted,fontSize:11}}>{log.date}</span></div>
-                                    {log.payee&&<div style={{color:C.textSec,fontSize:11}}>📍 {log.payee}</div>}
-                                    {log.note&&<div style={{color:C.textSec,fontSize:11}}>{log.note}</div>}
-                                    {log.amount>0&&<div style={{color:C.warn,fontSize:12,fontWeight:"bold",marginTop:4}}>{fmtYen(log.amount)}</div>}
-                                  </div>
-                                  <button onClick={()=>delLog(log.id)} style={{background:"none",border:"none",color:C.textMuted,cursor:"pointer",fontSize:16,padding:"2px 6px"}}>✕</button>
+                              {carLogs.map(log=>{const t=LOG_TYPES[log.type];const isEd=editLogId===log.id;return(
+                                <div key={log.id} style={{borderBottom:`1px solid ${C.border}22`,borderLeft:`3px solid ${isEd?C.yellow:t?.color}`}}>
+                                  {isEd?(
+                                    <div style={{padding:"14px 20px",background:"#0f1f3a"}}>
+                                      <div style={{color:C.yellow,fontSize:11,letterSpacing:2,marginBottom:12}}>── ログを編集</div>
+                                      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
+                                        <FR label="種別"><select value={editLogForm.type} onChange={e=>setEditLogForm({...editLogForm,type:e.target.value})} style={inp}>{Object.entries(LOG_TYPES).map(([k,v])=><option key={k} value={k}>{v.icon} {v.label}</option>)}</select></FR>
+                                        <FR label="実施日"><DateSelect value={editLogForm.date} onChange={v=>setEditLogForm({...editLogForm,date:v})}/></FR>
+                                      </div>
+                                      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
+                                        <FR label="金額（円）"><input type="number" value={editLogForm.amount} onChange={e=>setEditLogForm({...editLogForm,amount:e.target.value})} style={inp} placeholder="例：15000"/></FR>
+                                        <FR label="支払い先"><input type="text" value={editLogForm.payee} onChange={e=>setEditLogForm({...editLogForm,payee:e.target.value})} style={inp} placeholder="例：○○整備"/></FR>
+                                      </div>
+                                      <FR label="メモ"><input type="text" value={editLogForm.note} onChange={e=>setEditLogForm({...editLogForm,note:e.target.value})} style={inp} placeholder="メモ"/></FR>
+                                      <div style={{display:"flex",gap:8,marginTop:4}}><button onClick={updateLog} style={btn}>保存</button><button onClick={()=>setEditLogId(null)} style={btn2}>キャンセル</button></div>
+                                    </div>
+                                  ):(
+                                    <div style={{display:"flex",gap:12,padding:"14px 20px",alignItems:"flex-start"}}>
+                                      <span style={{fontSize:18}}>{t?.icon}</span>
+                                      <div style={{flex:1}}>
+                                        <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}><span style={{color:t?.color,fontSize:13,fontWeight:"bold"}}>{t?.label}</span><span style={{color:C.textMuted,fontSize:11}}>{log.date}</span></div>
+                                        {log.payee&&<div style={{color:C.textSec,fontSize:11}}>📍 {log.payee}</div>}
+                                        {log.note&&<div style={{color:C.textSec,fontSize:11}}>{log.note}</div>}
+                                        {log.amount>0&&<div style={{color:C.warn,fontSize:12,fontWeight:"bold",marginTop:4}}>{fmtYen(log.amount)}</div>}
+                                      </div>
+                                      <div style={{display:"flex",gap:4"}}>
+                                        <button onClick={()=>openEditLog(log)} style={{background:"none",border:"none",color:C.textMuted,cursor:"pointer",fontSize:13,padding:"2px 6px"}}>✏️</button>
+                                        <button onClick={()=>delLog(log.id)} style={{background:"none",border:"none",color:C.textMuted,cursor:"pointer",fontSize:16,padding:"2px 6px"}}>✕</button>
+                                      </div>
+                                    </div>
+                                  )}
                                 </div>
                               );})}
                             </div>
@@ -1068,17 +1122,38 @@ export default function App(){
                 {filteredByMonth.length===0?<div style={{color:C.textMuted,textAlign:"center",padding:40}}>この月の整備ログがありません</div>:(
                   <div style={{display:"flex",flexDirection:"column",gap:8}}>
                     {filteredByMonth.map(log=>{
-                      const car=cars.find(c=>c.id===log.carId);const t=LOG_TYPES[log.type];
+                      const car=cars.find(c=>c.id===log.carId);const t=LOG_TYPES[log.type];const isEd=editLogId===log.id;
                       return(
-                        <div key={log.id} style={{background:C.bgCard,border:`1px solid ${C.border}`,borderLeft:`3px solid ${t?.color}`,borderRadius:4,padding:"14px 20px",display:"flex",alignItems:"flex-start",gap:12}}>
-                          <span style={{fontSize:20}}>{t?.icon}</span>
-                          <div style={{flex:1}}>
-                            <div style={{display:"flex",justifyContent:"space-between",marginBottom:6}}><div style={{display:"flex",alignItems:"center",gap:10}}><span style={{color:t?.color,fontSize:13,fontWeight:"bold"}}>{t?.label}</span><span style={{color:C.yellow,fontSize:12}}>{car?.name||"不明"}</span></div><span style={{color:C.textMuted,fontSize:11}}>{log.date}</span></div>
-                            {log.payee&&<div style={{color:C.textSec,fontSize:11}}>📍 {log.payee}</div>}
-                            {log.note&&<div style={{color:C.textSec,fontSize:11}}>{log.note}</div>}
-                            {log.amount>0&&<div style={{color:C.warn,fontSize:13,fontWeight:"bold",marginTop:6}}>{fmtYen(log.amount)}</div>}
-                          </div>
-                          <button onClick={()=>delLog(log.id)} style={{background:"none",border:"none",color:C.textMuted,cursor:"pointer",fontSize:16,padding:"2px 6px"}}>✕</button>
+                        <div key={log.id} style={{background:C.bgCard,border:`1px solid ${isEd?C.yellow:C.border}`,borderLeft:`3px solid ${isEd?C.yellow:t?.color}`,borderRadius:4,overflow:"hidden"}}>
+                          {isEd?(
+                            <div style={{padding:"14px 20px",background:"#0f1f3a"}}>
+                              <div style={{color:C.yellow,fontSize:11,letterSpacing:2,marginBottom:12}}>── ログを編集：{car?.name}</div>
+                              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
+                                <FR label="種別"><select value={editLogForm.type} onChange={e=>setEditLogForm({...editLogForm,type:e.target.value})} style={inp}>{Object.entries(LOG_TYPES).map(([k,v])=><option key={k} value={k}>{v.icon} {v.label}</option>)}</select></FR>
+                                <FR label="実施日"><DateSelect value={editLogForm.date} onChange={v=>setEditLogForm({...editLogForm,date:v})}/></FR>
+                              </div>
+                              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
+                                <FR label="金額（円）"><input type="number" value={editLogForm.amount} onChange={e=>setEditLogForm({...editLogForm,amount:e.target.value})} style={inp} placeholder="例：15000"/></FR>
+                                <FR label="支払い先"><input type="text" value={editLogForm.payee} onChange={e=>setEditLogForm({...editLogForm,payee:e.target.value})} style={inp} placeholder="例：○○整備"/></FR>
+                              </div>
+                              <FR label="メモ"><input type="text" value={editLogForm.note} onChange={e=>setEditLogForm({...editLogForm,note:e.target.value})} style={inp} placeholder="メモ"/></FR>
+                              <div style={{display:"flex",gap:8,marginTop:4}}><button onClick={updateLog} style={btn}>保存</button><button onClick={()=>setEditLogId(null)} style={btn2}>キャンセル</button></div>
+                            </div>
+                          ):(
+                            <div style={{padding:"14px 20px",display:"flex",alignItems:"flex-start",gap:12}}>
+                              <span style={{fontSize:20}}>{t?.icon}</span>
+                              <div style={{flex:1}}>
+                                <div style={{display:"flex",justifyContent:"space-between",marginBottom:6}}><div style={{display:"flex",alignItems:"center",gap:10}}><span style={{color:t?.color,fontSize:13,fontWeight:"bold"}}>{t?.label}</span><span style={{color:C.yellow,fontSize:12}}>{car?.name||"不明"}</span></div><span style={{color:C.textMuted,fontSize:11}}>{log.date}</span></div>
+                                {log.payee&&<div style={{color:C.textSec,fontSize:11}}>📍 {log.payee}</div>}
+                                {log.note&&<div style={{color:C.textSec,fontSize:11}}>{log.note}</div>}
+                                {log.amount>0&&<div style={{color:C.warn,fontSize:13,fontWeight:"bold",marginTop:6}}>{fmtYen(log.amount)}</div>}
+                              </div>
+                              <div style={{display:"flex",gap:4}}>
+                                <button onClick={()=>openEditLog(log)} style={{background:"none",border:"none",color:C.textMuted,cursor:"pointer",fontSize:13,padding:"2px 6px"}}>✏️</button>
+                                <button onClick={()=>delLog(log.id)} style={{background:"none",border:"none",color:C.textMuted,cursor:"pointer",fontSize:16,padding:"2px 6px"}}>✕</button>
+                              </div>
+                            </div>
+                          )}
                         </div>
                       );
                     })}
