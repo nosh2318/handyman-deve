@@ -1,22 +1,6 @@
 {
-  "rewrites": [
-    { "source": "/(.*)", "destination": "/index.html" }
+  "version": 2,
+  "routes": [
+    { "src": "/(.*)", "dest": "/index.html" }
   ]
 }
-```
-
-**5.** 「Commit changes」をクリック
-
----
-
-## 配置場所のイメージ
-```
-handyman-fleet/          ← ここ（ルート）
-├── vercel.json          ← ★ここに置く
-├── index.html
-├── package.json
-├── vite.config.js
-└── src/
-    ├── main.jsx
-    ├── App.jsx
-    └── supabase.js
