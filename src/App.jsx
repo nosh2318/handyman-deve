@@ -14,12 +14,13 @@ const STATUS = {
   estimating:{label:"見積もり中",  color:"#60a5fa",bg:"#0a1628",icon:"📋"},
 };
 const LOG_TYPES = {
-  oil:       {label:"オイル交換",    icon:"🛢️",color:"#f59e0b"},
-  battery:   {label:"バッテリー交換",icon:"🔋",color:"#60a5fa"},
-  tire:      {label:"タイヤ交換",    icon:"⚙️",color:"#a78bfa"},
-  inspection:{label:"車検",          icon:"📋",color:"#34d399"},
-  repair:    {label:"修理",          icon:"🔩",color:"#f87171"},
-  other:     {label:"その他",        icon:"🔧",color:"#94a3b8"},
+  oil:        {label:"オイル交換",    icon:"🛢️",color:"#f59e0b"},
+  battery:    {label:"バッテリー交換",icon:"🔋",color:"#60a5fa"},
+  tire:       {label:"タイヤ交換",    icon:"⚙️",color:"#a78bfa"},
+  half_year:  {label:"半年点検",      icon:"🔍",color:"#34d399"},
+  inspection: {label:"車検",          icon:"📋",color:"#22c55e"},
+  repair:     {label:"修理",          icon:"🔩",color:"#f87171"},
+  other:      {label:"その他",        icon:"🔧",color:"#94a3b8"},
 };
 const CLASS_COLORS=["#f5c518","#60a5fa","#34d399","#f87171","#a78bfa","#f59e0b","#22c55e","#ef4444","#8b5cf6","#06b6d4"];
 
@@ -140,14 +141,6 @@ function InsuranceForm({carId,initAmount,initNote,onSave,onClose}){
   </div>;
 }
 
-/* ═══════════════════ STORE 識別 ═══════════════════ */
-const STORE_ID = (()=>{
-  const seg = window.location.pathname.split("/").filter(Boolean)[0] || "naha";
-  return ["naha","sapporo"].includes(seg) ? seg : "naha";
-})();
-const STORE_NAMES = { naha:"那覇空港店", sapporo:"札幌店" };
-const STORE_NAME  = STORE_NAMES[STORE_ID] || STORE_ID;
-
 /* ═══════════════════ MAIN APP ═══════════════════ */
 export default function App(){
   const [tab,setTab]=useState("dashboard");
@@ -196,10 +189,10 @@ export default function App(){
     try{
       // ── Supabase から全データを並列取得 ──
       const [r1,r2,r3,r4] = await Promise.all([
-        supabase.from("cars").select("*").eq("store_id",STORE_ID).order("created_at"),
-        supabase.from("car_data").select("*").eq("store_id",STORE_ID),
-        supabase.from("logs").select("*").eq("store_id",STORE_ID).order("created_at",{ascending:false}),
-        supabase.from("classes").select("*").eq("store_id",STORE_ID).order("created_at"),
+        supabase.from("cars").select("*").order("created_at"),
+        supabase.from("car_data").select("*"),
+        supabase.from("logs").select("*").order("created_at",{ascending:false}),
+        supabase.from("classes").select("*").order("created_at"),
       ]);
       if(r1.data) setCars(r1.data.map(row=>({
         id:row.id, name:row.name, plate:row.plate, type:row.type||"",
@@ -276,12 +269,12 @@ export default function App(){
     let nc;
     if(editClass){
       nc=classes.map(c=>c.id===editClass?{...c,...classForm}:c);
-      await supabase.from("classes").upsert({id:editClass,name:classForm.name,color:classForm.color,store_id:STORE_ID});
+      await supabase.from("classes").upsert({id:editClass,name:classForm.name,color:classForm.color});
       notify("クラスを更新しました ✓");
     } else {
       const newId=`cls${Date.now()}`;
       nc=[...classes,{id:newId,name:classForm.name,color:classForm.color}];
-      await supabase.from("classes").insert({id:newId,name:classForm.name,color:classForm.color,store_id:STORE_ID});
+      await supabase.from("classes").insert({id:newId,name:classForm.name,color:classForm.color});
       notify("クラスを追加しました ✓");
     }
     setClasses(nc);setShowClassForm(false);setEditClass(null);
@@ -304,14 +297,14 @@ export default function App(){
     let nc;
     if(editCar){
       nc=cars.map(c=>c.id===editCar?{...c,...carForm}:c);
-      const row={id:editCar,name:carForm.name,plate:carForm.plate,type:carForm.type||"",status:carForm.status||"active",class_id:carForm.classId||"",insurance_amount:carForm.insuranceAmount||"",insurance_note:carForm.insuranceNote||"",store_id:STORE_ID};
+      const row={id:editCar,name:carForm.name,plate:carForm.plate,type:carForm.type||"",status:carForm.status||"active",class_id:carForm.classId||"",insurance_amount:carForm.insuranceAmount||"",insurance_note:carForm.insuranceNote||""};
       const {error}=await supabase.from("cars").upsert(row);
       if(error){console.error("saveCar:",error);notify("保存エラー");return;}
       notify("更新しました ✓");
     } else {
       const newId=`c${Date.now()}`;
       nc=[...cars,{id:newId,...carForm}];
-      const row={id:newId,name:carForm.name,plate:carForm.plate,type:carForm.type||"",status:carForm.status||"active",class_id:carForm.classId||"",insurance_amount:carForm.insuranceAmount||"",insurance_note:carForm.insuranceNote||"",store_id:STORE_ID};
+      const row={id:newId,name:carForm.name,plate:carForm.plate,type:carForm.type||"",status:carForm.status||"active",class_id:carForm.classId||"",insurance_amount:carForm.insuranceAmount||"",insurance_note:carForm.insuranceNote||""};
       const {error}=await supabase.from("cars").insert(row);
       if(error){console.error("saveCar:",error);notify("保存エラー");return;}
       notify("追加しました ✓");
@@ -372,10 +365,10 @@ export default function App(){
     csvRows.forEach(row=>{
       const id=`c${Date.now()}_${Math.random().toString(36).slice(2,5)}`;
       nc.push({id,name:row.name,plate:row.plate,type:"",status:row.status||"active",classId:row.classId||""});
-      carRows.push({id,name:row.name,plate:row.plate,type:"",status:row.status||"active",class_id:row.classId||"",store_id:STORE_ID});
+      carRows.push({id,name:row.name,plate:row.plate,type:"",status:row.status||"active",class_id:row.classId||""});
       if(row.mileage){
         nd[id]={currentMileage:row.mileage,lastUpdated:now,mileageHistory:{[now.slice(0,7)]:row.mileage}};
-        dataRows.push({car_id:id,current_mileage:row.mileage,last_updated:now,mileage_history:{[now.slice(0,7)]:row.mileage},store_id:STORE_ID});
+        dataRows.push({car_id:id,current_mileage:row.mileage,last_updated:now,mileage_history:{[now.slice(0,7)]:row.mileage}});
       }
     });
     await supabase.from("cars").insert(carRows);
@@ -403,8 +396,7 @@ export default function App(){
       last_updated:new Date().toISOString(),
       mileage_history:newHist,
       prev_inspection_date:nd[carId].prevInspectionDate||"",
-      inspection_date:nd[carId].inspectionDate||"",
-      store_id:STORE_ID
+      inspection_date:nd[carId].inspectionDate||""
     });
     if(error) console.error("saveMil:",error);
     setMilCarId(null);setMilForm({mileage:"",month:new Date().toISOString().slice(0,7)});notify("走行距離を保存しました ✓");
@@ -421,8 +413,7 @@ export default function App(){
       last_updated:nd[carId].lastUpdated||null,
       prev_inspection_date:prev||"",
       inspection_date:next||"",
-      mileage_history:nd[carId].mileageHistory||{},
-      store_id:STORE_ID
+      mileage_history:nd[carId].mileageHistory||{}
     });
     if(error) console.error("saveInsp:",error);
     setInspCarId(null);notify("車検日を保存しました ✓");
@@ -436,8 +427,7 @@ export default function App(){
     setLogs(nl);
     const {error}=await supabase.from("logs").insert({
       id:newId, car_id:data.carId, type:data.type, date:data.date,
-      amount:data.amount?parseInt(data.amount):0, payee:data.payee||"", note:data.note||"",
-      store_id:STORE_ID
+      amount:data.amount?parseInt(data.amount):0, payee:data.payee||"", note:data.note||""
     });
     if(error) console.error("addLog:",error);
     setOpenLogCarId(null);notify("整備ログを追加しました ✓");
@@ -599,16 +589,8 @@ export default function App(){
         <div style={{display:"flex",alignItems:"center",gap:14}}>
           <div style={{background:C.yellow,color:"#000",padding:"5px 12px",fontWeight:"bold",fontSize:14,letterSpacing:2,borderRadius:2}}>HANDYMAN</div>
           <span style={{color:C.textMuted,fontSize:12,letterSpacing:2}}>FLEET MANAGER</span>
-          <span style={{color:C.yellow,fontSize:13,fontWeight:"bold",letterSpacing:1}}>｜ {STORE_NAME}</span>
         </div>
-        <div style={{display:"flex",alignItems:"center",gap:12}}>
-          {/* 店舗切り替え */}
-          {Object.entries(STORE_NAMES).map(([sid,sname])=>(
-            <a key={sid} href={`/${sid}`}
-              style={{color:sid===STORE_ID?C.yellow:C.textMuted,fontSize:11,textDecoration:"none",border:`1px solid ${sid===STORE_ID?C.yellow:C.border}`,padding:"4px 10px",borderRadius:3,fontWeight:sid===STORE_ID?"bold":"normal",background:sid===STORE_ID?`${C.yellow}11`:"none"}}>
-              {sname}
-            </a>
-          ))}
+        <div style={{display:"flex",alignItems:"center",gap:16}}>
           {alertCars.length>0&&<div style={{background:C.danger,color:"#fff",borderRadius:20,padding:"4px 12px",fontSize:12,fontWeight:"bold"}}>⚠️ {alertCars.length}件</div>}
           {notif&&<span style={{color:C.success,fontSize:12}}>{notif}</span>}
         </div>
@@ -1023,7 +1005,11 @@ export default function App(){
               </div>
             )}
 
-            {logViewMode==="month"&&(
+            {logViewMode==="month"&&(()=>{
+              const mTotal=filteredByMonth.reduce((s,l)=>s+(l.amount||0),0);
+              const maxTypeTotal=Math.max(1,...Object.keys(LOG_TYPES).map(k=>filteredByMonth.filter(l=>l.type===k).reduce((s,l)=>s+(l.amount||0),0)));
+              const maxClsTotalM=Math.max(1,...classes.map(cls=>filteredByMonth.filter(l=>{const car=cars.find(v=>v.id===l.carId);return car?.classId===cls.id;}).reduce((s,l)=>s+(l.amount||0),0)));
+              return(
               <div>
                 <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:16,flexWrap:"wrap"}}>
                   <MonthSelect value={logMonthFilter} onChange={v=>setLogMonthFilter(v)}/>
@@ -1031,9 +1017,54 @@ export default function App(){
                 </div>
                 <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(140px,1fr))",gap:10,marginBottom:20}}>
                   <div style={{background:C.bgCard,border:`1px solid ${C.border}`,borderRadius:6,padding:"14px 16px",textAlign:"center"}}><div style={{color:C.textMuted,fontSize:10,marginBottom:4}}>整備件数</div><div style={{color:C.textPri,fontSize:22,fontWeight:"bold"}}>{filteredByMonth.length}<span style={{fontSize:11,color:C.textMuted}}>件</span></div></div>
-                  <div style={{background:C.bgCard,border:`1px solid ${C.border}`,borderRadius:6,padding:"14px 16px",textAlign:"center"}}><div style={{color:C.textMuted,fontSize:10,marginBottom:4}}>総支出</div><div style={{color:C.warn,fontSize:22,fontWeight:"bold"}}>{fmtYen(filteredByMonth.reduce((s,l)=>s+(l.amount||0),0))}</div></div>
+                  <div style={{background:C.bgCard,border:`1px solid ${C.border}`,borderRadius:6,padding:"14px 16px",textAlign:"center"}}><div style={{color:C.textMuted,fontSize:10,marginBottom:4}}>総支出</div><div style={{color:C.warn,fontSize:22,fontWeight:"bold"}}>{fmtYen(mTotal)}</div></div>
                   <div style={{background:C.bgCard,border:`1px solid ${C.border}`,borderRadius:6,padding:"14px 16px",textAlign:"center"}}><div style={{color:C.textMuted,fontSize:10,marginBottom:4}}>対象車両数</div><div style={{color:C.textPri,fontSize:22,fontWeight:"bold"}}>{new Set(filteredByMonth.map(l=>l.carId)).size}<span style={{fontSize:11,color:C.textMuted}}>台</span></div></div>
                 </div>
+                {filteredByMonth.length>0&&(<>
+                  <div style={{background:"#0f1f3a",border:`1px solid ${C.border}`,borderRadius:8,padding:"16px 20px",marginBottom:14}}>
+                    <div style={{color:C.yellow,fontSize:11,letterSpacing:2,marginBottom:14}}>── 種別別支出内訳</div>
+                    <div style={{display:"grid",gap:9}}>
+                      {Object.entries(LOG_TYPES).map(([k,t])=>{
+                        const tLogs=filteredByMonth.filter(l=>l.type===k);
+                        const tTotal=tLogs.reduce((s,l)=>s+(l.amount||0),0);
+                        const pct=mTotal>0?Math.round(tTotal/mTotal*100):0;
+                        if(!tLogs.length)return null;
+                        return(
+                          <div key={k} style={{display:"flex",alignItems:"center",gap:10}}>
+                            <span style={{fontSize:15,minWidth:22}}>{t.icon}</span>
+                            <div style={{color:t.color,fontSize:12,minWidth:112}}>{t.label}</div>
+                            <div style={{color:C.textMuted,fontSize:11,minWidth:30}}>{tLogs.length}件</div>
+                            <div style={{flex:1}}><div style={{background:C.border,borderRadius:3,height:6,overflow:"hidden"}}><div style={{background:t.color,height:"100%",width:`${Math.round(tTotal/maxTypeTotal*100)}%`,borderRadius:3,transition:"width .3s"}}/></div></div>
+                            <div style={{color:C.warn,fontSize:12,fontWeight:"bold",minWidth:90,textAlign:"right"}}>{fmtYen(tTotal)}</div>
+                            {pct>0&&<div style={{color:C.textMuted,fontSize:10,minWidth:34,textAlign:"right"}}>{pct}%</div>}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                  {classes.length>0&&(
+                    <div style={{background:"#0f1f3a",border:`1px solid ${C.border}`,borderRadius:8,padding:"16px 20px",marginBottom:14}}>
+                      <div style={{color:C.yellow,fontSize:11,letterSpacing:2,marginBottom:14}}>── クラス別支出内訳</div>
+                      <div style={{display:"grid",gap:9}}>
+                        {classes.map(cls=>{
+                          const cLogs=filteredByMonth.filter(l=>{const car=cars.find(v=>v.id===l.carId);return car?.classId===cls.id;});
+                          const cTotal=cLogs.reduce((s,l)=>s+(l.amount||0),0);
+                          const pct=mTotal>0?Math.round(cTotal/mTotal*100):0;
+                          if(!cLogs.length)return null;
+                          return(
+                            <div key={cls.id} style={{display:"flex",alignItems:"center",gap:10}}>
+                              <div style={{color:cls.color,fontSize:12,minWidth:134}}>◆ {cls.name}</div>
+                              <div style={{color:C.textMuted,fontSize:11,minWidth:30}}>{cLogs.length}件</div>
+                              <div style={{flex:1}}><div style={{background:C.border,borderRadius:3,height:6,overflow:"hidden"}}><div style={{background:cls.color,height:"100%",width:`${Math.round(cTotal/maxClsTotalM*100)}%`,borderRadius:3,transition:"width .3s"}}/></div></div>
+                              <div style={{color:C.warn,fontSize:12,fontWeight:"bold",minWidth:90,textAlign:"right"}}>{fmtYen(cTotal)}</div>
+                              {pct>0&&<div style={{color:C.textMuted,fontSize:10,minWidth:34,textAlign:"right"}}>{pct}%</div>}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                </>)}
                 {filteredByMonth.length===0?<div style={{color:C.textMuted,textAlign:"center",padding:40}}>この月の整備ログがありません</div>:(
                   <div style={{display:"flex",flexDirection:"column",gap:8}}>
                     {filteredByMonth.map(log=>{
@@ -1054,7 +1085,8 @@ export default function App(){
                   </div>
                 )}
               </div>
-            )}
+              );
+            })()}
 
             {logViewMode==="year"&&(()=>{
               const years=allCalYears.length>0?allCalYears:[new Date().getFullYear()];
@@ -1131,6 +1163,63 @@ export default function App(){
                     })}
                     {filteredByYear.length===0&&<div style={{color:C.textMuted,textAlign:"center",padding:32}}>{logYearFilter}年の整備ログがありません</div>}
                   </div>
+
+                  {/* ② 種別別内訳（年別） */}
+                  {filteredByYear.length>0&&(()=>{
+                    const yTotal=filteredByYear.reduce((s,l)=>s+(l.amount||0),0);
+                    const maxTypeY=Math.max(1,...Object.keys(LOG_TYPES).map(k=>filteredByYear.filter(l=>l.type===k).reduce((s,l)=>s+(l.amount||0),0)));
+                    return(
+                      <div style={{background:"#0f1f3a",border:`1px solid ${C.border}`,borderRadius:8,padding:"16px 20px",marginBottom:14}}>
+                        <div style={{color:C.yellow,fontSize:11,letterSpacing:2,marginBottom:14}}>── {logYearFilter}年 種別別支出内訳</div>
+                        <div style={{display:"grid",gap:9}}>
+                          {Object.entries(LOG_TYPES).map(([k,t])=>{
+                            const tLogs=filteredByYear.filter(l=>l.type===k);
+                            const tTotal=tLogs.reduce((s,l)=>s+(l.amount||0),0);
+                            const pct=yTotal>0?Math.round(tTotal/yTotal*100):0;
+                            if(!tLogs.length)return null;
+                            return(
+                              <div key={k} style={{display:"flex",alignItems:"center",gap:10}}>
+                                <span style={{fontSize:15,minWidth:22}}>{t.icon}</span>
+                                <div style={{color:t.color,fontSize:12,minWidth:112}}>{t.label}</div>
+                                <div style={{color:C.textMuted,fontSize:11,minWidth:30}}>{tLogs.length}件</div>
+                                <div style={{flex:1}}><div style={{background:C.border,borderRadius:3,height:6,overflow:"hidden"}}><div style={{background:t.color,height:"100%",width:`${Math.round(tTotal/maxTypeY*100)}%`,borderRadius:3,transition:"width .3s"}}/></div></div>
+                                <div style={{color:C.warn,fontSize:12,fontWeight:"bold",minWidth:90,textAlign:"right"}}>{fmtYen(tTotal)}</div>
+                                {pct>0&&<div style={{color:C.textMuted,fontSize:10,minWidth:34,textAlign:"right"}}>{pct}%</div>}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })()}
+
+                  {/* ③ クラス別内訳（年別） */}
+                  {filteredByYear.length>0&&classes.length>0&&(()=>{
+                    const yTotal=filteredByYear.reduce((s,l)=>s+(l.amount||0),0);
+                    const maxClsY=Math.max(1,...classes.map(cls=>filteredByYear.filter(l=>{const car=cars.find(v=>v.id===l.carId);return car?.classId===cls.id;}).reduce((s,l)=>s+(l.amount||0),0)));
+                    return(
+                      <div style={{background:"#0f1f3a",border:`1px solid ${C.border}`,borderRadius:8,padding:"16px 20px",marginBottom:14}}>
+                        <div style={{color:C.yellow,fontSize:11,letterSpacing:2,marginBottom:14}}>── {logYearFilter}年 クラス別支出内訳</div>
+                        <div style={{display:"grid",gap:9}}>
+                          {classes.map(cls=>{
+                            const cLogs=filteredByYear.filter(l=>{const car=cars.find(v=>v.id===l.carId);return car?.classId===cls.id;});
+                            const cTotal=cLogs.reduce((s,l)=>s+(l.amount||0),0);
+                            const pct=yTotal>0?Math.round(cTotal/yTotal*100):0;
+                            if(!cLogs.length)return null;
+                            return(
+                              <div key={cls.id} style={{display:"flex",alignItems:"center",gap:10}}>
+                                <div style={{color:cls.color,fontSize:12,minWidth:134}}>◆ {cls.name}</div>
+                                <div style={{color:C.textMuted,fontSize:11,minWidth:30}}>{cLogs.length}件</div>
+                                <div style={{flex:1}}><div style={{background:C.border,borderRadius:3,height:6,overflow:"hidden"}}><div style={{background:cls.color,height:"100%",width:`${Math.round(cTotal/maxClsY*100)}%`,borderRadius:3,transition:"width .3s"}}/></div></div>
+                                <div style={{color:C.warn,fontSize:12,fontWeight:"bold",minWidth:90,textAlign:"right"}}>{fmtYen(cTotal)}</div>
+                                {pct>0&&<div style={{color:C.textMuted,fontSize:10,minWidth:34,textAlign:"right"}}>{pct}%</div>}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })()}
 
                   {/* 月別推移 */}
                   {filteredByYear.length>0&&(
